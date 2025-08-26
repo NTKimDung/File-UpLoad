@@ -43,8 +43,84 @@ Kết quả là ở trang web ta sẽ thấy được hình ảnh ta thay dổi 
 <img width="1247" height="911" alt="image" src="https://github.com/user-attachments/assets/f8a94edf-4d1d-4136-93a1-da8a04ef7f0e" />
 
 *Bước 3: Điều tra sâu:
+
 Ở bước này ta điều tra trang web bằng công cụ burp suite:
-Ta xem các yêu cầu GET/POST trên 
+Ta xem các yêu cầu GET/POST tại tab HTTP history như sau: Ta chú ý vào method `POST` 
+
+<img width="1925" height="1080" alt="image" src="https://github.com/user-attachments/assets/ab08bfbf-ae31-4cab-a60d-0a6cf41259ea" />   
+
+Ở bước này ta quan sát bộ request (yêu cầu) và response (phản hồi) giữa trình duyệt ↔ server khi bạn thực hiện hành động như upload avatar.
+
+Với ý nghĩa như: 
+Xác định loại request
+
+Ở hình: ta thấy dòng POST /my-account/avatar → nghĩa là khi bạn upload file, trình duyệt gửi request POST kèm dữ liệu file đến server.
+
+Xem dữ liệu gửi đi
+
+Trong khung Request bạn thấy:
+
+Header (User-Agent, Cookie, Content-Type, Boundary multipart/form-data...)
+
+Body: chứa nội dung file meme-meo-4.jpg.
+→ Điều này giúp bạn hiểu chính xác cách dữ liệu được gửi.
+
+Xem phản hồi từ server
+
+Trong khung Response: server trả về HTTP/2 200 OK + thông báo file đã được upload.
+
+Điều này cho thấy server đã chấp nhận và xử lý file thành công.
+
+* Bước 4: Mô phỏng các bước thực hiện tấn công qua Repeater với:
+  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/679613b8-99af-468c-8562-cf38383abe84" />
+  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4fdc55ae-0ddd-4d75-b9a0-ad83a17e2db8" />
+  
+Mục đích Repeater là để quan sát response của server sau mỗi lần gửi lại (replay) một request nhiều lần mà không cần thao tác lại trên trình duyệt hoặc chỉnh sửa request (thêm/xóa header, đổi tham số, đổi filename/file content trong upload, đổi cookie…) có thay đổi hay không → từ đó kiểm tra hệ thống có lỗ hổng hay không.
+
+Ở Request `Upload` với nội dung POST /my-account/avatar mà tôi đã gửi từ trình duyệt (qua Proxy rồi gửi sang Repeater).
+
+Nó chứa thông tin file bạn upload (meme-meo-4.jpg).
+
+Response bên phải: server phản hồi "The file avatars/meme-meo-4.jpg has been uploaded." → nghĩa là upload thành công. 
+
+* Bước 5: Thực hiện các bước tấn công như sau:
+
+ Ta thay đổi tên file `meme-meo-4.jpg` ở Request thành `myexploit.php` và chèn thêm ột đoạn code dộc hại `<?php echo file_get_contents('/etc/passwd'); ?>` vào Request và kết quả như hình.
+ <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/2c1cc1ae-129c-4cdf-8aaa-3d1bcb5977f4" />
+Sau khi thực hiện thay đổi đuôi file từ `.jpg` sang `.php` và chèn đoạn mã độc PHP vào nội dung file tuy nhiên kết quả bên trang Respone là hiển thị file đã upload thành công tức là trang web này không có cơ chế kiểm tra định dạng file nghiêm ngặt nên File myexploit.php đã được lưu thành công trên server dưới dạng file thực thi PHP.
+
+Nghĩa là kẻ tấn công hoàn toàn có thể truy cập URL dẫn đến file vừa upload để kích hoạt mã độc, khi truy cập, server sẽ thực thi đoạn lệnh `<?php echo file_get_contents('/etc/passwd'); ?>` và trả về nội dung file `/etc/passwd`.
+
+Ý nghĩa ở bước thực hiện này là:
+Việc response trả về upload thành công chính là dấu hiệu khẳng định lỗ hổng File Upload Vulnerability tồn tại, và hacker có thể khai thác.
+
+* Bước 6: Mô phỏng chạy file mã độc đã được lưu ở server sau khi thực hiện ở bước 5:
+Ta thực hiện ở tab Repeater `Show` để thấy được kết quả sau khi gọi file `myexploit.php` có chứa mã độc như sau:
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/2e765aab-180e-4e16-a4df-e69cc77c5740" />
+
+Nội dung trả về ở trang Respone là kết quả lệnh file_get_contents('/etc/passwd').
+
+Do đó bạn thấy toàn bộ nội dung file /etc/passwd của máy chủ bị lộ ra.
+
+* Ý nghĩa bài lab này là:
+Ta biết được lỗ hổng của trang web là:
+Trang web cho phép người dùng upload file tuy nhiên nó không kiểm tra đúng loại file, đuôi file và không lọc nội dung độc hại, dẫn đến có thể upload file độc hại do kẻ tấn công xây dựng cụ thể ở đây là file `myexploit.php`.
+Cũng như biết được cách thức khai thác của kẻ tấn công như:
+Kẻ tấn công đổi đuôi file từ .jpg thành .php và chèn mã độc và Upload thành công file được lưu trong thư mục public sau khi truy cập file này qua trình duyệt, server thực thi mã độc thay vì hiển thị ảnh.
+
+## II. Exploiting flawed validation of file uploads (Khai thác xác thực thiếu sót của tải lên tệp)
+### 1. Flawed file type validation (Xác thực loại tệp thiếu sót) - Lab: Web shell upload via Content-Type restriction bypass (Lab: Web Shell Tải lên thông qua Bỏ qua hạn chế loại nội dung)
+* Tương tự bước 1 ở Lab trên ta đăng nhập vào trang web.
+Bước 2:
+
+
+
+
+
+
+ 
+
+
 
 
 
