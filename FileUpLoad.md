@@ -279,7 +279,6 @@ Ta thấy được file shell.php đã được up load thành công trên serve
 
 
 
-
  
 
 
