@@ -1,3 +1,41 @@
+# Tìm hiểu lỗ hổng Upload File trên website
+## Tên tài liệu: Tìm hiểu lỗ hổng Upload File trên website
+## Thực hiện: Kim Dung
+## Cập nhật lần cuối: 29/08/2025
+
+# Mục lục:
+
+# A. Lý thuyết
+## I. Đăt vấn đề
+### 1. Giới thiệu lỗ hổng File upload
+### 2. Nguyên nhân gây ra lỗ hổng File upload
+### 3. Tác động của lỗ hổng File upload
+### 4. Webshell
+
+# B. Thực hành
+## I. Exploiting unrestricted file uploads to deploy a web shell (Khai thác tải lên tệp không giới hạn để triển khai shell web)
+### 1. Lab: Remote code execution via web shell upload (LAB: Thực thi mã từ xa thông qua tải lên shell web)
+## II. Exploiting flawed validation of file uploads (Khai thác xác thực thiếu sót của tải lên tệp)
+### 1. Flawed file type validation (Xác thực loại tệp thiếu sót) - Lab: Web shell upload via Content-Type restriction bypass (Lab: Web Shell Tải lên thông qua Bỏ qua hạn chế loại nội dung)
+### 2. Preventing file execution in user-accessible directories() -Lab: Web shell upload via path traversal(Lab: Web Shell Tải lên qua đường dẫn đường dẫn)
+### 3. Lab: Web shell upload via extension blacklist bypass(Lab: Web Shell Tải lên thông qua Bỏ qua danh sách đen mở rộng)
+### 4. Lab: Web shell upload via obfuscated file extension(Web shell tải lên thông qua tiện ích mở rộng tệp obfuscated)
+### 5. Lab: Remote code execution via polyglot web shell upload(Thực thi mã từ xa thông qua tải lên shell webglot web)
+### 6. Lab: Web shell upload via race condition(Tải lên shell web thông qua điều kiện cuộc đua)
+
+# C. Tầm ảnh hưởng của lỗ hông file upload
+
+# D. Các phương pháp ngăn ngừa lỗ hổng:
+## 1. Kiểm soát chặt chẽ loại tệp và nội dung
+## 2. Lưu file trong vị trí an toàn
+## 3. Vô hiệu hóa cấu hình nguy hiểm
+## 4. Giới hạn kích thước và loại nội dung
+## 5. Quét và kiểm tra file trước khi sử dụng
+## 6. Kiểm soát truy cập và phân quyền
+## 7. Logging và giám sát liên tục
+
+# Nội dung:
+
 # A. Lý thuyết
 ## I. Đăt vấn đề
 ### 1. Giới thiệu lỗ hổng File upload
@@ -352,7 +390,102 @@ Chúng ta cùng tìm kiếm file hình ảnh và file php sẽ được lưu ở
 
   Đồng thời gửi hai trang web này về tab Repeater để thực hiện các bước mô phỏng việc server lọc file.
   
-  Ta cho hai trang web thành một nhóm 
+* Ta cho hai trang web thành một nhóm với mục đích là:
 
+Request đầu tiên (POST /my-account/avatar): là request upload file (thường để thay avatar)
+Request thứ hai (GET /files/avatars/shell1.php): là request để truy cập hoặc thực thi file shell đã upload.
 
-  
+Khi ta gộp hai request thành một nhóm và gửi đồng thời (Send group - parallel), mục tiêu là:
+
+Gửi request upload và request truy cập file gần như cùng lúc.
+
+Lợi dụng độ trễ hoặc lỗi xử lý trên server, khiến file shell được thực thi trước khi server kịp áp dụng cơ chế lọc/xoá file.
+
+Nếu server xử lý không đồng bộ đúng cách, bạn có thể chạy được mã PHP độc hại trong file đã upload.
+
+* Ý nghĩa bài lab này là 
+
+Giúp hiểu rõ cách khai thác lỗ hổng race condition trong quá trình upload tệp. Lỗ hổng này xảy ra khi máy chủ xử lý upload theo nhiều bước nhưng không đảm bảo đồng bộ, dẫn đến việc kẻ tấn công có thể tải lên một tệp độc hại (ví dụ: shell.php) và đồng thời gửi yêu cầu truy cập tệp này trước khi hệ thống kịp đổi tên, chặn hoặc xóa nó. Nhờ đó, mã độc trong web shell được thực thi, cho phép kẻ tấn công điều khiển máy chủ.
+
+Qua bài lab này, ta rút ra được rằng việc chỉ lọc đuôi tệp hoặc đổi tên tệp là chưa đủ an toàn. Thay vào đó, hệ thống cần kiểm tra cả nội dung tệp, đồng thời xử lý quy trình upload theo cơ chế nguyên tử (atomic) để tránh tình trạng race condition, đảm bảo an toàn cho hệ thống.
+
+# C. Tầm ảnh hưởng của lỗ hông file upload
+Tầm ảnh hưởng của lỗ hổng upload file là rất nghiêm trọng, vì nó có thể mở ra nhiều con đường tấn công khác nhau, tùy vào mức độ kiểm soát mà kẻ tấn công đạt được. Dưới đây là các tác động chính:
+
+1. Chiếm quyền điều khiển hệ thống
+
+Nếu kẻ tấn công upload thành công web shell (ví dụ: .php, .asp, .jsp), họ có thể:
+
+Thực thi lệnh trên máy chủ.
+
+Tải, xóa, hoặc chỉnh sửa dữ liệu.
+
+Dùng máy chủ làm bàn đạp để tấn công hệ thống khác trong mạng nội bộ.
+
+2. Đọc hoặc rò rỉ dữ liệu nhạy cảm
+
+Upload tệp và khai thác có thể cho phép truy cập các file quan trọng như:
+
+Cấu hình hệ thống (config.php, .env).
+
+Dữ liệu người dùng, cơ sở dữ liệu, hoặc token API.
+
+Thông tin chứng chỉ, khóa bí mật.
+
+3. Tấn công leo thang hoặc duy trì quyền kiểm soát
+
+Sử dụng file upload để cài đặt backdoor.
+
+Leo thang quyền hạn từ web user lên root hoặc admin.
+
+4. Tấn công từ chối dịch vụ (DoS)
+
+Upload tệp lớn hoặc script tự động để chiếm dung lượng ổ đĩa hoặc làm cạn kiệt tài nguyên máy chủ.
+
+5. Tấn công gián tiếp
+
+Tải lên file độc hại để khai thác các người dùng khác khi họ truy cập file, ví dụ:
+
+Cross-Site Scripting (XSS) với file SVG/HTML chứa script.
+
+Phishing hoặc lừa đảo thông qua file đính kèm.
+
+=> Kết luận
+
+Lỗ hổng upload file luôn được xếp vào nhóm có rủi ro cao vì nó có thể dẫn đến toàn quyền kiểm soát hệ thống nếu không được kiểm soát chặt chẽ. Do đó, việc triển khai các biện pháp bảo vệ như xác thực nội dung tệp, lưu trữ ngoài thư mục web, đổi tên ngẫu nhiên, và kiểm soát quyền truy cập là cực kỳ quan trọng.
+
+# D. Các phương pháp ngăn ngừa lỗ hổng:
+Như các phần ý nghĩa của bài lab tôi đút kết được các phương pháp ngăn ngừa lỗ hổng up load file như sau:
+Việc ngăn chặn lỗ hổng upload file đòi hỏi một quy trình bảo mật nhiều lớp, kết hợp cả kiểm tra nội dung, cấu hình máy chủ, và giám sát hệ thống. Cụ thể, các biện pháp chính bao gồm:
+
+## 1. Kiểm soát chặt chẽ loại tệp và nội dung
+
+Chỉ cho phép người dùng tải lên các định dạng thật sự cần thiết như .jpg, .png, .pdf. Ngoài việc kiểm tra phần mở rộng, hệ thống cần phân tích MIME type và magic bytes để đảm bảo nội dung tệp khớp với loại định dạng. Điều này ngăn kẻ tấn công đổi tên file, chẳng hạn shell.php thành image.jpg, để qua mặt bộ lọc.
+
+## 2. Lưu file trong vị trí an toàn
+
+Tất cả các file upload phải được lưu trong thư mục không thể thực thi nhằm ngăn ngừa việc chạy trực tiếp các script độc hại. Nên sử dụng cơ chế đổi tên file ngẫu nhiên (random string hoặc UUID) để tránh đoán được đường dẫn truy cập. Nếu cần hiển thị file cho người dùng, nên sử dụng truy cập gián tiếp qua ứng dụng thay vì cho phép truy cập trực tiếp.
+
+## 3. Vô hiệu hóa cấu hình nguy hiểm
+
+Các file cấu hình như .htaccess không nên được phép upload, bởi chúng có thể thay đổi cách máy chủ xử lý thư mục, dẫn đến việc cho phép thực thi mã. Đồng thời, cần đảm bảo thư mục upload được thiết lập với quyền hạn nghiêm ngặt để ngăn chặn việc chạy script.
+
+## 4. Giới hạn kích thước và loại nội dung
+
+Giới hạn dung lượng của tệp tải lên nhằm tránh các cuộc tấn công chiếm dụng tài nguyên (DoS). Ngoài ra, nên loại bỏ hoặc làm sạch các metadata tiềm ẩn rủi ro, chẳng hạn thông tin EXIF trong ảnh có thể bị lợi dụng để nhúng payload độc hại.
+
+## 5. Quét và kiểm tra file trước khi sử dụng
+
+Tích hợp công cụ antivirus hoặc các dịch vụ quét nội dung tự động để phát hiện mã độc trong tệp trước khi lưu hoặc sử dụng. Đối với các hệ thống quan trọng, có thể triển khai sandbox để phân tích hành vi của file trong môi trường cách ly trước khi cho phép xử lý chính thức.
+
+## 6. Kiểm soát truy cập và phân quyền
+
+Thiết lập quyền chỉ đọc cho các file upload, và hạn chế mọi thao tác ghi hoặc thực thi không cần thiết. Khi người dùng tải file về, có thể sử dụng cơ chế Content-Disposition: attachment để buộc trình duyệt tải xuống thay vì hiển thị trực tiếp, giảm nguy cơ khai thác qua XSS hoặc các tấn công trình duyệt khác.
+
+## 7. Logging và giám sát liên tục
+
+Hệ thống nên ghi lại toàn bộ hoạt động liên quan đến upload và truy cập file, đồng thời thiết lập cảnh báo nếu phát hiện các hành vi bất thường, chẳng hạn số lượng upload quá lớn trong một khoảng thời gian ngắn hoặc truy cập các file khả nghi.
+
+=> Kết luận
+
+Những biện pháp trên cho thấy rằng bảo mật upload file không chỉ phụ thuộc vào một lớp phòng thủ duy nhất. Chỉ khi kết hợp đồng bộ nhiều lớp kiểm soát — từ kiểm tra nội dung, cấu hình server, đến giám sát liên tục — mới có thể giảm thiểu rủi ro từ lỗ hổng này và bảo vệ hệ thống khỏi những cuộc tấn công nghiêm trọng như thực thi mã từ xa (RCE) hay rò rỉ dữ liệu.
