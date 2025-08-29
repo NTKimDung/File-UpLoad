@@ -276,15 +276,83 @@ Ta thử cách có thể sử dụng ký tự null byte %00 để vượt qua c�
 
 Ta thấy được file shell.php đã được up load thành công trên server. Bước tiếp theo ta thực hiện các bước khai thác như các bài lab trên.
 
+### 5. Lab: Remote code execution via polyglot web shell upload(Thực thi mã từ xa thông qua tải lên shell webglot web)
+
+Ta thực các bước đăng nhập vào lab tương tự như các bài lab trên. 
+*Bước 2: Ta dùng công cụ ExifTool để thực hiện giả lập tấn công của kẻ tấn công:
+Ở bước này ta dùng công cụ ExifTool, vì công cụ này chuyên xử lý metadata (siêu dữ liệu) của file, đặc biệt là file hình ảnh, âm thanh, video, PDF,… Nó có thể xem, chỉnh sửa, thêm hoặc xóa các thông tin metadata. Và chính khả năng này có thể bị lợi dụng trong các bài khai thác bảo mật. Ta sẽ lợi dụng điểm này để thực hiện tấn công.
+
+Ta kiểm tra data của ảnh `meme-meo-4.jpg`:
+
+<img width="646" height="436" alt="image" src="https://github.com/user-attachments/assets/49ff7145-c990-4f59-92e0-b26ba751a77d" />
+
+Kiểm tra nội dụng metadata của ảnh và ta thấy được kết quả là ảnh không có gì đặc biệt và là một tệp ảnh bình thường và giờ chúng ta sẽ làm cho nó đặt biệt bằng cách chèn thêm một cái gì đó vào siêu dữ liệu của hình ảnh này bằng các bước sau:
+* Bước 3: Tiêm vào metadata môt trường comment với nội dung `test` vào file `meme-meo-4.jpg`
+  Kết quả: 
+  <img width="456" height="79" alt="image" src="https://github.com/user-attachments/assets/3514f2a5-2b23-449e-b2ba-9f27b387d106" />
+
+  Sau khi thực hiện, ExifTool trả về `1 image files updated` Nghĩa là metadata của file đã được chỉnh sửa thành công.
+
+  Ta kiểm tra lại file `meme-meo-4.jpg` có điều gì thay đổi không sau khi chèn thêm trường comment:
+  <img width="717" height="432" alt="image" src="https://github.com/user-attachments/assets/4c1f9cb4-e5da-47d8-add9-3862ca46cc91" />
+
+Ta thấy được trường comment đã hiện ra ở metadata của file `meme-meo-4.jpg`.
+* Bước 4: Thực hiện tiêm nội dung mã độc (cụ thể là dòng lệnh php) vào trường mới được tiêm:
+  <img width="1056" height="93" alt="image" src="https://github.com/user-attachments/assets/42091c0a-62d3-4fe9-8b79-a680cefbd902" />
+
+Sau khi tiêm vào dòng lệnh thì công cụ đã cập nhật lại nội dung ở trường comment mới. Như vậy ta đã có hình ảnh có đuôi là `.jpg` tuy nhiên nội dung ảnh lại có dòng mã độc của php.
+
+<img width="960" height="436" alt="image" src="https://github.com/user-attachments/assets/67b35abf-6335-4829-9323-1718e4467c21" />
+
+Cuối cùng ta xuất kết quả thành một file mới tên wshell.php. File này vẫn giữ định dạng dữ liệu của ảnh nhưng có phần metadata chứa đoạn mã PHP. Bằng câu lệnh: `exiftool -comment="<?php echo 'START ' . file_get_contents('/home/carlos/secret') . ' END'; ?>" meme-meo-4.jpg -o wshell.php`
+
+* Bước 5: Ta thực hiện up load file trên trang chủ:
+  <img width="1338" height="885" alt="image" src="https://github.com/user-attachments/assets/a33405bf-a261-45d5-a05e-6da1388b8ebc" />
+  Kết quả là trang chủ đã tải tệp thành công:
+  <img width="994" height="273" alt="image" src="https://github.com/user-attachments/assets/bf0cd626-2ab2-4e33-ab0e-183b1a1464d2" />
+
+Tuy nhiên ở trang web chỉ hiển thị một hình ảnh mà ta có thể nhìn bằng mắt thường xem là ảnh hỏng tuy nhiên qua công cụ burp suite ta có thể rỏ được các chi tiết cuat nội dung file ta vừa up load lên:
+
+* Bước 6: Điều tra sâu:
+  Ta dùng công cụ burp suite để xem kỉ nội dung của metadata mà ta truyền vào máy chủ:
+  <img width="1925" height="1080" alt="image" src="https://github.com/user-attachments/assets/1246fd32-17e9-4e75-ace5-73e65c7fb5d9" />
+
+Ta thấy được file ta chèn vào ở cột MIME hiển thị là HTML là đuôi file mà trang chủ có thể chấp nhận để tải về tuy nhiên ở cột extension lại hiển thị đuôi file là php. và ở phần respone ta thấy được dòng comment mà ta chèn lệnh php đã được thực thi.
+
+* Vậy ở bài lab này có ý nghĩa là:
+Cho thấy rằng cơ chế lọc đuôi file (extension) của server tuy đã được triển khai nhưng chưa đủ để đảm bảo an toàn, vì nội dung bên trong file không hề được kiểm tra.Điều này tạo ra lỗ hổng nghiêm trọng mà kẻ tấn công có thể khai thác bằng cách tiêm mã độc vào metadata hoặc phần nội dung bên trong file ảnh và lợi dụng khả năng thực thi script của server để chạy đoạn mã độc này.
+Từ đó thực hiện các hành vi như đọc file nhạy cảm, chiếm quyền điều khiển server, hoặc leo thang tấn công.
+
+Lỗ hổng này cũng nhấn mạnh rằng việc chỉ dựa vào cơ chế denylist extension là không an toàn; hệ thống cần kiểm tra kỹ nội dung file, loại MIME thực tế, và cấu hình server sao cho thư mục upload không thể thực thi script, nhằm giảm thiểu rủi ro bị khai thác.
+
+### 6. Lab: Web shell upload via race condition(Tải lên shell web thông qua điều kiện cuộc đua)
+Tương tự các bài lab trên ta thực hiện các bước đăng nhập tương tự.
+
+Ở bài lab này ta thực hiện hai lược up load file:
+
+Một là ảnh bình thường:
+<img width="643" height="142" alt="image" src="https://github.com/user-attachments/assets/cfffddb5-44ec-45b7-93a4-c85eab0a57f6" />
+
+Hai là một file có đuôi php:
+<img width="797" height="136" alt="image" src="https://github.com/user-attachments/assets/18f7c53f-3941-4408-bc5d-c87d7f3af6fd" />
+
+Ta thấy được trang chủ đã có cơ chế lọc đuôi file chắc chắn, và tất nhiên các kiểu tấn công ở các bài lab trên cũng không thể thực hiện. 
+
+*Bước 2:
+Chúng ta cùng tìm kiếm file hình ảnh và file php sẽ được lưu ở đâu bằng cách ta kiểm tra url của hình ảnh đã được upload thành công:
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/8e7d09f9-8f84-421f-8c70-cf6399f68137" />
+
+Đồng thời ta sửa tên file ảnh thành tên file php và kết quả:
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/340bb81b-718e-481b-a369-3250bf51ee19" />
+
+* Bước 3: Thực hiện điều tra sâu:
+  Sau khi tìm kiếm được thư mục mà hai file lưu trữ ở trên server ta dùng công cụ burp suite để thực hiện các bước tiếp theo:
+
+  Đồng thời gửi hai trang web này về tab Repeater để thực hiện các bước mô phỏng việc server lọc file.
+  
+  Ta cho hai trang web thành một nhóm 
 
 
-
- 
-
-
-
-
-
-
-
-
+  
